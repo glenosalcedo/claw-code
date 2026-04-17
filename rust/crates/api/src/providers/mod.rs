@@ -235,11 +235,20 @@ const MODEL_REGISTRY: &[(&str, ProviderMetadata)] = &[
             default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
         },
     ),
-    // Note: `kimi-k2.5` is intentionally NOT registered as a bare OpenCode GO
-    // entry. Upstream already routes bare `kimi-*` prefix to DashScope
-    // (US-023), and overriding that here would break existing DashScope
-    // users. Users who want Kimi via OpenCode GO must spell the full prefix:
-    // `claw --model opencode-go/kimi-k2.5`.
+    // `kimi-k2.5` is registered here for TAB-completion visibility under the
+    // OpenCode GO group. It does NOT change routing for the bare form —
+    // metadata_for_model() uses prefix matching (`kimi-*` → DashScope) which
+    // runs independently of registry lookups. Users who want Kimi via
+    // OpenCode GO must spell the full prefix: `claw --model opencode-go/kimi-k2.5`.
+    (
+        "kimi-k2.5",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
     (
         "qwen3.5-plus",
         ProviderMetadata {
@@ -652,6 +661,24 @@ pub(crate) fn dotenv_value(key: &str) -> Option<String> {
     let cwd = std::env::current_dir().ok()?;
     let values = load_dotenv_file(&cwd.join(".env"))?;
     values.get(key).filter(|value| !value.is_empty()).cloned()
+}
+
+/// Display prefix for a provider kind — used to render `provider/model-id`
+/// pairs in the `/model` TAB completion and the `/providers` report.
+#[must_use]
+pub fn provider_display_prefix(kind: ProviderKind) -> &'static str {
+    match kind {
+        ProviderKind::Anthropic => "anthropic",
+        ProviderKind::Xai => "xai",
+        ProviderKind::OpenAi => "openai",
+        ProviderKind::OpenCodeGo => "opencode-go",
+    }
+}
+
+/// Iterate every entry registered in `MODEL_REGISTRY`. Used by the CLI to
+/// drive registry-based TAB completion and the `/providers` command.
+pub fn registered_models() -> impl Iterator<Item = (&'static str, ProviderMetadata)> + 'static {
+    MODEL_REGISTRY.iter().copied()
 }
 
 #[cfg(test)]
