@@ -3200,12 +3200,21 @@ fn run_repl(
                 if let Some(prompt) = try_resolve_bare_skill_prompt(&cwd, &trimmed) {
                     editor.push_history(input);
                     cli.record_prompt_history(&trimmed);
-                    cli.run_turn(&prompt)?;
+                    // Errors from a single turn (API 4xx/5xx, network, provider
+                    // misroute, etc.) are scoped to that turn -- surface them
+                    // to the user but keep the REPL alive so accumulated
+                    // context isn't lost. Pre-fix, a single 401 from a
+                    // misrouted `/model xai/...` killed the session.
+                    if let Err(error) = cli.run_turn(&prompt) {
+                        eprintln!("{error}");
+                    }
                     continue;
                 }
                 editor.push_history(input);
                 cli.record_prompt_history(&trimmed);
-                cli.run_turn(&trimmed)?;
+                if let Err(error) = cli.run_turn(&trimmed) {
+                    eprintln!("{error}");
+                }
             }
             input::ReadOutcome::Cancel => {}
             input::ReadOutcome::Exit => {
