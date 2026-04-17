@@ -3117,12 +3117,21 @@ fn run_repl(
                 if let Some(prompt) = try_resolve_bare_skill_prompt(&cwd, &trimmed) {
                     editor.push_history(input);
                     cli.record_prompt_history(&trimmed);
-                    cli.run_turn(&prompt)?;
+                    // Errors from a single turn (API 4xx/5xx, network, provider
+                    // misroute, etc.) are scoped to that turn -- surface them
+                    // to the user but keep the REPL alive so accumulated
+                    // context isn't lost. Pre-fix, a single 401 from a
+                    // misrouted `/model xai/...` killed the session.
+                    if let Err(error) = cli.run_turn(&prompt) {
+                        eprintln!("{error}");
+                    }
                     continue;
                 }
                 editor.push_history(input);
                 cli.record_prompt_history(&trimmed);
-                cli.run_turn(&trimmed)?;
+                if let Err(error) = cli.run_turn(&trimmed) {
+                    eprintln!("{error}");
+                }
             }
             input::ReadOutcome::Cancel => {}
             input::ReadOutcome::Exit => {
@@ -8421,6 +8430,7 @@ mod tests {
             request_id: Some("req_jobdori_789".to_string()),
             body: String::new(),
             retryable: true,
+            suggested_action: None,
         };
 
         let rendered = format_user_visible_api_error("session-issue-22", &error);
@@ -8443,6 +8453,7 @@ mod tests {
                 request_id: Some("req_jobdori_790".to_string()),
                 body: String::new(),
                 retryable: true,
+                suggested_action: None,
             }),
         };
 
@@ -8506,6 +8517,7 @@ mod tests {
             request_id: Some("req_ctx_456".to_string()),
             body: String::new(),
             retryable: false,
+            suggested_action: None,
         };
 
         let rendered = format_user_visible_api_error("session-issue-32", &error);
@@ -8537,6 +8549,7 @@ mod tests {
                 request_id: Some("req_ctx_retry_789".to_string()),
                 body: String::new(),
                 retryable: false,
+                suggested_action: None,
             }),
         };
 
