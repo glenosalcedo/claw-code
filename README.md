@@ -117,6 +117,10 @@ cargo test --workspace
 - [`ROADMAP.md`](./ROADMAP.md) — active roadmap and open cleanup work
 - [`PHILOSOPHY.md`](./PHILOSOPHY.md) — why the project exists and how it is operated
 
+### Providers
+
+- [`docs/providers/opencode-go.md`](./docs/providers/opencode-go.md) — OpenCode GO (GLM, Kimi, Qwen, MiMo, MiniMax) — [PT-BR](./docs/providers/opencode-go.pt-br.md) · [ES](./docs/providers/opencode-go.es.md)
+
 ## Ecosystem
 
 Claw Code is built in the open alongside the broader UltraWorkers toolchain:
