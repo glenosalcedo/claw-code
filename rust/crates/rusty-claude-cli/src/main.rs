@@ -7391,6 +7391,8 @@ fn slash_command_completion_candidates_with_sessions(
         "/model opus",
         "/model sonnet",
         "/model haiku",
+        "/model grok",
+        "/model kimi",
         "/permissions ",
         "/permissions read-only",
         "/permissions workspace-write",
@@ -7419,6 +7421,15 @@ fn slash_command_completion_candidates_with_sessions(
     if !model.trim().is_empty() {
         completions.insert(format!("/model {}", resolve_model_alias(model)));
         completions.insert(format!("/model {model}"));
+    }
+
+    // Registry-driven `/model <provider>/<id>` entries. Grouping emerges from
+    // MODEL_REGISTRY insertion order: Anthropic → xAI → OpenAi → OpenCodeGo.
+    // Short aliases (opus, sonnet, haiku, grok, kimi) are kept above via the
+    // hardcoded list — they're ergonomic shortcuts documented in USAGE.md.
+    for (model_id, meta) in api::registered_models() {
+        let prefix = api::provider_display_prefix(meta.provider);
+        completions.insert(format!("/model {prefix}/{model_id}"));
     }
 
     if let Some(active_session_id) = active_session_id.filter(|value| !value.trim().is_empty()) {
@@ -8423,6 +8434,7 @@ mod tests {
             request_id: Some("req_jobdori_789".to_string()),
             body: String::new(),
             retryable: true,
+            suggested_action: None,
         };
 
         let rendered = format_user_visible_api_error("session-issue-22", &error);
@@ -8445,6 +8457,7 @@ mod tests {
                 request_id: Some("req_jobdori_790".to_string()),
                 body: String::new(),
                 retryable: true,
+                suggested_action: None,
             }),
         };
 
@@ -8508,6 +8521,7 @@ mod tests {
             request_id: Some("req_ctx_456".to_string()),
             body: String::new(),
             retryable: false,
+            suggested_action: None,
         };
 
         let rendered = format_user_visible_api_error("session-issue-32", &error);
@@ -8539,6 +8553,7 @@ mod tests {
                 request_id: Some("req_ctx_retry_789".to_string()),
                 body: String::new(),
                 retryable: false,
+                suggested_action: None,
             }),
         };
 
@@ -11651,6 +11666,44 @@ UU conflicted.rs",
             assert!(
                 !candidates.contains(&with_slash),
                 "stub command {with_slash} should not appear in REPL completions"
+            );
+        }
+    }
+
+    #[test]
+    fn model_completion_renders_registry_as_provider_prefix_pairs() {
+        let candidates = slash_command_completion_candidates_with_sessions("opus", None, vec![]);
+        // One representative per provider group must be present as
+        // `/model <prefix>/<model-id>`. Catches both the registry iteration
+        // and the provider_display_prefix mapping in one go.
+        for expected in [
+            "/model anthropic/opus",
+            "/model xai/grok-code-fast-1",
+            "/model xai/grok-4.20-0309-reasoning",
+            "/model opencode-go/glm-5.1",
+            "/model opencode-go/kimi-k2.5",
+            "/model opencode-go/minimax-m2.7",
+        ] {
+            assert!(
+                candidates.contains(&expected.to_string()),
+                "missing registry-driven completion: {expected}",
+            );
+        }
+    }
+
+    #[test]
+    fn model_completion_keeps_short_aliases() {
+        let candidates = slash_command_completion_candidates_with_sessions("opus", None, vec![]);
+        for short in [
+            "/model opus",
+            "/model sonnet",
+            "/model haiku",
+            "/model grok",
+            "/model kimi",
+        ] {
+            assert!(
+                candidates.contains(&short.to_string()),
+                "short alias {short} should stay in completions alongside registry entries",
             );
         }
     }
