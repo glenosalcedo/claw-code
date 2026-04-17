@@ -342,7 +342,13 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
             default_base_url: anthropic::DEFAULT_BASE_URL,
         });
     }
-    if canonical.starts_with("grok") {
+    // Bare `grok-*` names AND the explicit `xai/` provider prefix both route
+    // to xAI. The prefix form is needed so users can disambiguate routing
+    // even when `OPENAI_BASE_URL` is set to an OpenAI-compat endpoint that
+    // happens to proxy different models — without this arm the fallback
+    // auth-sniffer in detect_provider_kind would misroute `xai/grok-*` to
+    // the OpenAi path.
+    if canonical.starts_with("grok") || canonical.starts_with("xai/") {
         return Some(ProviderMetadata {
             provider: ProviderKind::Xai,
             auth_env: "XAI_API_KEY",
@@ -1336,6 +1342,20 @@ NO_EQUALS_LINE
     // (env_lock only protects within a single binary). The detection logic
     // is covered: OPENAI_BASE_URL alone routes to OpenAi as a last-resort
     // fallback in detect_provider_kind().
+
+    #[test]
+    fn xai_prefix_routes_to_xai_endpoint_regardless_of_openai_env() {
+        // Regression: `/model xai/grok-4-1-fast-non-reasoning` was falling
+        // through to the auth-sniffer and hitting the OpenAi path (pointing
+        // at OpenCode GO via OPENAI_BASE_URL), which returned a confusing
+        // "Model not supported" 401 from the wrong provider. The prefix must
+        // pin routing to xAI.
+        let meta = metadata_for_model("xai/grok-4-1-fast-non-reasoning").expect("metadata");
+        assert_eq!(meta.provider, ProviderKind::Xai);
+        assert_eq!(meta.auth_env, "XAI_API_KEY");
+        assert_eq!(meta.base_url_env, "XAI_BASE_URL");
+        assert_eq!(meta.default_base_url, openai_compat::DEFAULT_XAI_BASE_URL);
+    }
 
     #[test]
     fn opencode_go_prefix_routes_to_opencode_go_endpoint() {
