@@ -8,6 +8,7 @@ use crate::error::ApiError;
 use crate::types::{MessageRequest, MessageResponse};
 
 pub mod anthropic;
+pub mod custom;
 pub mod openai_compat;
 
 #[allow(dead_code)]
@@ -37,6 +38,13 @@ pub enum ProviderKind {
     /// MiniMax models via an OpenAI-compatible endpoint at
     /// `https://opencode.ai/zen/go/v1`.
     OpenCodeGo,
+    /// User-defined provider registered via the `providers` section of
+    /// `~/.claw.json` or `./.claw.json`. Metadata is resolved at runtime
+    /// from [`custom::load_custom_providers`] rather than the static
+    /// `MODEL_REGISTRY`. The specific display prefix (e.g. `"openrouter"`)
+    /// is the provider's `name` field — use
+    /// [`custom::find_custom_provider_for_model`] to recover it.
+    Custom,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -335,6 +343,10 @@ pub fn resolve_model_alias(model: &str) -> String {
                 // are intentionally left for a later PR to keep this change
                 // focused on provider registration.
                 ProviderKind::OpenCodeGo => trimmed,
+                // Custom providers are never registered in MODEL_REGISTRY
+                // (their data lives in the runtime cache), so this arm is
+                // unreachable in practice — but the match must be exhaustive.
+                ProviderKind::Custom => trimmed,
             })
         })
         .map_or_else(|| trimmed.to_string(), ToOwned::to_owned)
@@ -422,6 +434,25 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
             auth_env: "OPENCODE_GO_API_KEY",
             base_url_env: "OPENCODE_GO_BASE_URL",
             default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        });
+    }
+    // Custom providers registered via `.claw.json`. The `providers` section
+    // maps a display prefix → (base_url, api_key_env, models). We look up
+    // `<prefix>/<rest>` and synthesize ProviderMetadata so the client layer
+    // can construct an OpenAiCompatClient with the user-declared endpoint.
+    if let Some(provider) = custom::find_custom_provider_for_model(custom_providers(), &canonical) {
+        // ProviderMetadata stores &'static str, so we leak once per loaded
+        // provider. The set is finite (bounded by the user's .claw.json)
+        // and providers are loaded once per process, so this doesn't grow.
+        let auth_env: &'static str = Box::leak(provider.api_key_env.clone().into_boxed_str());
+        let default_base_url: &'static str = Box::leak(provider.base_url.clone().into_boxed_str());
+        return Some(ProviderMetadata {
+            provider: ProviderKind::Custom,
+            auth_env,
+            // Custom providers read their URL literally from .claw.json;
+            // the empty sentinel signals "no separate env override".
+            base_url_env: "",
+            default_base_url,
         });
     }
     None
@@ -672,13 +703,50 @@ pub fn provider_display_prefix(kind: ProviderKind) -> &'static str {
         ProviderKind::Xai => "xai",
         ProviderKind::OpenAi => "openai",
         ProviderKind::OpenCodeGo => "opencode-go",
+        // Generic fallback label for custom providers; callers that need
+        // the exact user-declared prefix (e.g. "openrouter") should use
+        // [`custom::find_custom_provider_for_model`] instead.
+        ProviderKind::Custom => "custom",
     }
+}
+
+/// Runtime cache for custom providers loaded from `.claw.json`.
+/// Populated once on first access; users must restart `claw` after editing
+/// `.claw.json` so the hot path stays free of filesystem I/O.
+fn custom_providers() -> &'static [custom::CustomProvider] {
+    static CACHE: std::sync::OnceLock<Vec<custom::CustomProvider>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(custom::load_custom_providers).as_slice()
 }
 
 /// Iterate every entry registered in `MODEL_REGISTRY`. Used by the CLI to
 /// drive registry-based TAB completion and the `/providers` command.
-pub fn registered_models() -> impl Iterator<Item = (&'static str, ProviderMetadata)> + 'static {
-    MODEL_REGISTRY.iter().copied()
+/// Iterate every model known to the routing layer. Built-in entries come
+/// from the compile-time `MODEL_REGISTRY`; custom entries are synthesized
+/// from `.claw.json` providers as `"<prefix>/<model-id>"` strings. Returns
+/// owned `String`s because custom entries cannot produce `&'static` keys.
+pub fn registered_models() -> Box<dyn Iterator<Item = (String, ProviderMetadata)> + 'static> {
+    let static_entries = MODEL_REGISTRY
+        .iter()
+        .copied()
+        .map(|(id, meta)| (id.to_string(), meta));
+
+    let custom_entries = custom_providers().iter().flat_map(|provider| {
+        let auth_env: &'static str = Box::leak(provider.api_key_env.clone().into_boxed_str());
+        let default_base_url: &'static str = Box::leak(provider.base_url.clone().into_boxed_str());
+        let meta = ProviderMetadata {
+            provider: ProviderKind::Custom,
+            auth_env,
+            base_url_env: "",
+            default_base_url,
+        };
+        let name = provider.name.clone();
+        provider
+            .models
+            .iter()
+            .map(move |model_id| (format!("{name}/{model_id}"), meta))
+    });
+
+    Box::new(static_entries.chain(custom_entries))
 }
 
 #[cfg(test)]

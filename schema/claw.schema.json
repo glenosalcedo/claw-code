@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://claw-code.example/schemas/claw.json/v1",
+  "title": "Claw Code user/project configuration",
+  "description": "Configuration file read from ~/.claw.json and ./.claw.json by claw-code.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "aliases": {
+      "type": "object",
+      "description": "Short names that resolve to canonical model IDs.",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultMode": {
+          "type": "string",
+          "enum": ["default", "plan", "acceptEdits", "dontAsk"]
+        }
+      }
+    },
+    "mcpServers": {
+      "type": "object",
+      "description": "MCP servers to register on startup.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type", "url"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["http", "sse", "websocket", "stdio"]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "description": "Custom AI providers made available via the `<prefix>/<model-id>` routing form. The map key becomes the prefix.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["base_url", "api_key_env"],
+        "additionalProperties": false,
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "OpenAI-compatible /chat/completions endpoint for this provider."
+          },
+          "api_key_env": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]*$",
+            "description": "Env var holding the provider's API key. Should match /^[A-Z_][A-Z0-9_]*$/."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "description": "Model IDs advertised for this provider. Each renders as `<prefix>/<model-id>` in the /model TAB completion."
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "aliases": {
+        "gpt4": "openai/gpt-4"
+      }
+    },
+    {
+      "aliases": {
+        "gpt4": "openai/gpt-4",
+        "claude": "anthropic/claude-3-opus"
+      },
+      "permissions": {
+        "defaultMode": "plan"
+      },
+      "mcpServers": {
+        "myServer": {
+          "type": "http",
+          "url": "https://example.com/mcp",
+          "headers": {
+            "Authorization": "Bearer token123"
+          }
+        }
+      },
+      "providers": {
+        "openrouter": {
+          "base_url": "https://openrouter.ai/api/v1",
+          "api_key_env": "OPENROUTER_API_KEY",
+          "models": ["anthropic/claude-3-opus", "openai/gpt-4", "google/gemini-pro"]
+        }
+      }
+    }
+  ]
+}
