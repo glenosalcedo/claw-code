@@ -829,16 +829,21 @@ pub fn is_reasoning_model(model: &str) -> bool {
 fn strip_routing_prefix(model: &str) -> &str {
     if let Some(pos) = model.find('/') {
         let prefix = &model[..pos];
-        // Only strip if the prefix before "/" is a known routing prefix,
-        // not if "/" appears in the middle of the model name for other reasons.
+        // Static built-in prefixes first — fastest check, no runtime lookup.
         if matches!(
             prefix,
             "openai" | "xai" | "grok" | "qwen" | "kimi" | "opencode-go"
         ) {
-            &model[pos + 1..]
-        } else {
-            model
+            return &model[pos + 1..];
         }
+        // Custom providers declared via `.claw.json` register dynamic
+        // prefixes (e.g. `openrouter`, `ollama-local`). Strip those too so
+        // `openrouter/anthropic/claude-sonnet-4.6` becomes
+        // `anthropic/claude-sonnet-4.6` for the wire request.
+        if super::custom_providers().iter().any(|p| p.name == prefix) {
+            return &model[pos + 1..];
+        }
+        model
     } else {
         model
     }

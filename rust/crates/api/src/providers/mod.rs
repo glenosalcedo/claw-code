@@ -713,7 +713,7 @@ pub fn provider_display_prefix(kind: ProviderKind) -> &'static str {
 /// Runtime cache for custom providers loaded from `.claw.json`.
 /// Populated once on first access; users must restart `claw` after editing
 /// `.claw.json` so the hot path stays free of filesystem I/O.
-fn custom_providers() -> &'static [custom::CustomProvider] {
+pub(crate) fn custom_providers() -> &'static [custom::CustomProvider] {
     static CACHE: std::sync::OnceLock<Vec<custom::CustomProvider>> = std::sync::OnceLock::new();
     CACHE.get_or_init(custom::load_custom_providers).as_slice()
 }

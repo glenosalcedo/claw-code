@@ -189,6 +189,13 @@ const TOP_LEVEL_FIELDS: &[FieldSpec] = &[
         name: "aliases",
         expected: FieldType::Object,
     },
+    // Declarative custom providers (PR 5). Map of display prefix →
+    // { base_url, api_key_env, models }. Loaded at runtime by
+    // `api::providers::custom::load_custom_providers`.
+    FieldSpec {
+        name: "providers",
+        expected: FieldType::Object,
+    },
     FieldSpec {
         name: "providerFallbacks",
         expected: FieldType::Object,
