@@ -51,6 +51,32 @@ Nota: el alias `kimi` de OpenAi y su forma canónica `kimi-k2.5` se muestran baj
 ## Cómo funciona internamente
 `slash_command_completion_candidates_with_sessions()` en `rusty-claude-cli/src/main.rs` ahora itera sobre `api::registered_models()` y formatea cada entrada mediante `api::provider_display_prefix()`. Ambas funciones auxiliares son públicas en el crate `api`, por lo que los complementos y otras herramientas pueden reutilizar la misma lógica de representación.
 
+## El comando /providers
+El comando `/providers` examina el entorno de ejecución y enumera todos los proveedores de IA registrados junto con el estado de sus credenciales. Detecta automáticamente las variables de entorno requeridas y agrupa los modelos disponibles bajo sus respectivos espacios de nombres. Esta salida proporciona una vista consolidada de la configuración activa, indicando claramente qué servicios están autenticados y listos para el enrutamiento.
+
+```text
+Providers:
+  [OK ] anthropic      env ANTHROPIC_API_KEY detected
+         aliases: haiku, opus, sonnet
+  [OK ] xai            env XAI_API_KEY detected
+         models: grok, grok-2, grok-3, grok-3-mini, grok-4-0709,
+                 grok-4-fast-reasoning, grok-4-fast-non-reasoning,
+                 grok-4-1-fast-reasoning, grok-4-1-fast-non-reasoning,
+                 grok-4.20-0309-reasoning, grok-4.20-0309-non-reasoning,
+                 grok-code-fast-1
+  [MISS] dashscope     env DASHSCOPE_API_KEY not set
+         aliases: kimi
+         (bare kimi-* names route here; use opencode-go/kimi-k2.5 for OpenCode GO)
+  [OK ] opencode-go    env OPENCODE_GO_API_KEY detected
+         models: glm-5, glm-5.1, kimi-k2.5, minimax-m2.5, minimax-m2.7,
+                 mimo-v2-omni, mimo-v2-pro, qwen3.5-plus, qwen3.6-plus
+```
+
+**Por qué ayuda**
+- Ofrece una verificación rápida para confirmar qué proveedores están listos para su uso inmediato.
+- Proporciona visibilidad explícita sobre el registro de cada modelo, incluyendo la `auth_env` requerida y el `prefix` de enrutamiento.
+- Complementa el flujo de trabajo `/model` + `TAB`, que ahora está completamente basado en registro según la PR anterior.
+
 ## Ver también
 - [`docs/providers/opencode-go.md`](../providers/opencode-go.md) — Detalles del proveedor OpenCode GO
 - [`docs/providers/opencode-go.pt-br.md`](../providers/opencode-go.pt-br.md) — PT-BR
