@@ -51,6 +51,32 @@ Nota: o alias `kimi` da OpenAi e sua forma canônica `kimi-k2.5` são exibidos s
 ## Como funciona por baixo dos panos
 A função `slash_command_completion_candidates_with_sessions()` em `rusty-claude-cli/src/main.rs` agora itera sobre `api::registered_models()` e formata cada entrada por meio de `api::provider_display_prefix()`. Ambos os auxiliares são públicos no crate `api`, permitindo que plug-ins e outras ferramentas reutilizem a mesma renderização.
 
+## O comando /providers
+O comando `/providers` verifica o ambiente de execução e lista todos os provedores de IA registrados junto com o status de suas credenciais. Ele detecta automaticamente as variáveis de ambiente necessárias e agrupa os modelos disponíveis sob seus respectivos namespaces. Essa saída oferece uma visão consolidada da configuração ativa, indicando quais serviços estão autenticados e prontos para roteamento.
+
+```text
+Providers:
+  [OK ] anthropic      env ANTHROPIC_API_KEY detected
+         aliases: haiku, opus, sonnet
+  [OK ] xai            env XAI_API_KEY detected
+         models: grok, grok-2, grok-3, grok-3-mini, grok-4-0709,
+                 grok-4-fast-reasoning, grok-4-fast-non-reasoning,
+                 grok-4-1-fast-reasoning, grok-4-1-fast-non-reasoning,
+                 grok-4.20-0309-reasoning, grok-4.20-0309-non-reasoning,
+                 grok-code-fast-1
+  [MISS] dashscope     env DASHSCOPE_API_KEY not set
+         aliases: kimi
+         (bare kimi-* names route here; use opencode-go/kimi-k2.5 for OpenCode GO)
+  [OK ] opencode-go    env OPENCODE_GO_API_KEY detected
+         models: glm-5, glm-5.1, kimi-k2.5, minimax-m2.5, minimax-m2.7,
+                 mimo-v2-omni, mimo-v2-pro, qwen3.5-plus, qwen3.6-plus
+```
+
+**Por que ajuda**
+- Realiza uma verificação rápida para confirmar quais provedores estão prontos para uso imediato.
+- Garante visibilidade explícita sobre o registro de cada modelo, incluindo a `auth_env` exigida e o `prefix` de roteamento.
+- Complementa o fluxo `/model` + `TAB`, que agora é totalmente orientado por registro, conforme a PR anterior.
+
 ## Veja também
 - [`docs/providers/opencode-go.md`](../providers/opencode-go.md) — Detalhes do provedor OpenCode GO
 - [`docs/providers/opencode-go.pt-br.md`](../providers/opencode-go.pt-br.md) — PT-BR

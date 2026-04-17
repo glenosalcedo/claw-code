@@ -715,7 +715,7 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     SlashCommandSpec {
         name: "providers",
         aliases: &[],
-        summary: "List available model providers",
+        summary: "List registered providers with credential detection status",
         argument_hint: None,
         resume_supported: true,
     },
@@ -1069,6 +1069,7 @@ pub enum SlashCommand {
         confirm: bool,
     },
     Cost,
+    Providers,
     Resume {
         session_path: Option<String>,
     },
@@ -1218,6 +1219,7 @@ impl SlashCommand {
             Self::Clear { .. } => "/clear",
             Self::Compact { .. } => "/compact",
             Self::Cost => "/cost",
+            Self::Providers => "/providers",
             Self::Doctor => "/doctor",
             Self::Config { .. } => "/config",
             Self::Memory { .. } => "/memory",
@@ -1351,6 +1353,10 @@ pub fn validate_slash_command_input(
             validate_no_args(command, &args)?;
             SlashCommand::Cost
         }
+        "providers" => {
+            validate_no_args(command, &args)?;
+            SlashCommand::Providers
+        }
         "resume" => SlashCommand::Resume {
             session_path: Some(require_remainder(command, remainder, "<session-path>")?),
         },
@@ -1383,7 +1389,7 @@ pub fn validate_slash_command_input(
         "skills" | "skill" => SlashCommand::Skills {
             args: parse_skills_args(remainder.as_deref())?,
         },
-        "doctor" | "providers" => {
+        "doctor" => {
             validate_no_args(command, &args)?;
             SlashCommand::Doctor
         }
@@ -4110,6 +4116,7 @@ pub fn handle_slash_command(
         | SlashCommand::OutputStyle { .. }
         | SlashCommand::AddDir { .. }
         | SlashCommand::History { .. }
+        | SlashCommand::Providers
         | SlashCommand::Unknown(_) => None,
     }
 }

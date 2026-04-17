@@ -1148,6 +1148,68 @@ fn provider_label(kind: ProviderKind) -> &'static str {
     }
 }
 
+/// Render a provider-by-provider credential detection report for `/providers`.
+///
+/// Groups MODEL_REGISTRY entries by `auth_env` (so bare `kimi` which routes
+/// to DashScope appears under a `dashscope` heading, distinct from the
+/// `openai/` proper route). For each group, marks `[OK ]` when the env var
+/// is set and non-empty, `[MISS]` otherwise. Models/aliases are sorted
+/// alphabetically for deterministic output.
+fn build_providers_report() -> String {
+    use std::collections::BTreeMap;
+
+    // Group key: display prefix derived from (provider, auth_env). DashScope
+    // entries under ProviderKind::OpenAi get their own heading.
+    let mut groups: BTreeMap<&'static str, (&'static str, Vec<&'static str>)> = BTreeMap::new();
+
+    for (model_id, meta) in api::registered_models() {
+        let prefix = if meta.auth_env == "DASHSCOPE_API_KEY" {
+            "dashscope"
+        } else {
+            api::provider_display_prefix(meta.provider)
+        };
+        let entry = groups.entry(prefix).or_insert((meta.auth_env, Vec::new()));
+        entry.1.push(model_id);
+    }
+
+    let mut out = String::from("Providers:\n");
+    for (prefix, (auth_env, mut ids)) in groups {
+        ids.sort_unstable();
+        let detected = env::var(auth_env).map(|v| !v.is_empty()).unwrap_or(false);
+        let status = if detected { "[OK ]" } else { "[MISS]" };
+        let phrase = if detected { "detected" } else { "not set" };
+        out.push_str(&format!(
+            "  {status} {prefix:<14} env {auth_env} {phrase}\n"
+        ));
+        let label = if prefix == "anthropic" {
+            "aliases"
+        } else {
+            "models"
+        };
+        let mut line = format!("         {label}: ");
+        let indent = "                 ";
+        let mut first = true;
+        for id in &ids {
+            let addition = if first {
+                id.to_string()
+            } else {
+                format!(", {id}")
+            };
+            if line.len() + addition.len() > 88 && !first {
+                out.push_str(line.trim_end_matches(' '));
+                out.push('\n');
+                line = format!("{indent}{id}");
+            } else {
+                line.push_str(&addition);
+            }
+            first = false;
+        }
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out
+}
+
 fn format_connected_line(model: &str) -> String {
     let provider = provider_label(detect_provider_kind(model));
     format!("Connected: {model} via {provider}")
@@ -2769,6 +2831,17 @@ fn run_resume_command(
                 })),
             })
         }
+        SlashCommand::Providers => {
+            let report = build_providers_report();
+            Ok(ResumeCommandOutcome {
+                session: session.clone(),
+                message: Some(report.clone()),
+                json: Some(serde_json::json!({
+                    "kind": "providers",
+                    "report": report,
+                })),
+            })
+        }
         SlashCommand::Config { section } => {
             let message = render_config_report(section.as_deref())?;
             let json = render_config_json(section.as_deref())?;
@@ -3924,6 +3997,10 @@ impl LiveCli {
             SlashCommand::Clear { confirm } => self.clear_session(confirm)?,
             SlashCommand::Cost => {
                 self.print_cost();
+                false
+            }
+            SlashCommand::Providers => {
+                println!("{}", build_providers_report());
                 false
             }
             SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
@@ -11706,6 +11783,41 @@ UU conflicted.rs",
                 "short alias {short} should stay in completions alongside registry entries",
             );
         }
+    }
+
+    #[test]
+    fn providers_report_lists_all_known_provider_groups() {
+        // Doesn't require any env mutation — checks that grouping and header
+        // rendering cover the four kinds we register today.
+        let report = super::build_providers_report();
+        for needle in ["anthropic", "xai", "dashscope", "opencode-go"] {
+            assert!(
+                report.contains(needle),
+                "provider group {needle} missing from report:\n{report}",
+            );
+        }
+        // Header line must render for each group.
+        assert!(report.starts_with("Providers:"));
+        assert!(report.contains("env ANTHROPIC_API_KEY"));
+        assert!(report.contains("env DASHSCOPE_API_KEY"));
+        assert!(report.contains("env OPENCODE_GO_API_KEY"));
+        assert!(report.contains("env XAI_API_KEY"));
+    }
+
+    #[test]
+    fn providers_report_labels_status_based_on_env_detection() {
+        // Without env mutation the real detection depends on host state, so
+        // both statuses are accepted; we just ensure exactly one appears per
+        // group and the format string is stable.
+        let report = super::build_providers_report();
+        let ok_count = report.matches("[OK ]").count();
+        let miss_count = report.matches("[MISS]").count();
+        // Four groups registered today: anthropic, xai, dashscope, opencode-go.
+        assert_eq!(
+            ok_count + miss_count,
+            4,
+            "expected 4 status markers (one per group), got OK={ok_count} MISS={miss_count}",
+        );
     }
 }
 
