@@ -1145,6 +1145,7 @@ fn provider_label(kind: ProviderKind) -> &'static str {
         ProviderKind::Xai => "xai",
         ProviderKind::OpenAi => "openai",
         ProviderKind::OpenCodeGo => "opencode-go",
+        ProviderKind::Custom => "custom",
     }
 }
 
@@ -1160,13 +1161,21 @@ fn build_providers_report() -> String {
 
     // Group key: display prefix derived from (provider, auth_env). DashScope
     // entries under ProviderKind::OpenAi get their own heading.
-    let mut groups: BTreeMap<&'static str, (&'static str, Vec<&'static str>)> = BTreeMap::new();
+    let mut groups: BTreeMap<String, (&'static str, Vec<String>)> = BTreeMap::new();
 
     for (model_id, meta) in api::registered_models() {
-        let prefix = if meta.auth_env == "DASHSCOPE_API_KEY" {
-            "dashscope"
+        // For custom providers the prefix is the first path segment of the
+        // synthesized id (e.g. "openrouter/claude-sonnet-4.6" → "openrouter").
+        // Fall back to the display_prefix helper for all other kinds.
+        let prefix: String = if matches!(meta.provider, api::ProviderKind::Custom) {
+            model_id
+                .split_once('/')
+                .map(|(head, _)| head.to_string())
+                .unwrap_or_else(|| "custom".to_string())
+        } else if meta.auth_env == "DASHSCOPE_API_KEY" {
+            "dashscope".to_string()
         } else {
-            api::provider_display_prefix(meta.provider)
+            api::provider_display_prefix(meta.provider).to_string()
         };
         let entry = groups.entry(prefix).or_insert((meta.auth_env, Vec::new()));
         entry.1.push(model_id);
@@ -3191,12 +3200,21 @@ fn run_repl(
                 if let Some(prompt) = try_resolve_bare_skill_prompt(&cwd, &trimmed) {
                     editor.push_history(input);
                     cli.record_prompt_history(&trimmed);
-                    cli.run_turn(&prompt)?;
+                    // Errors from a single turn (API 4xx/5xx, network, provider
+                    // misroute, etc.) are scoped to that turn -- surface them
+                    // to the user but keep the REPL alive so accumulated
+                    // context isn't lost. Pre-fix, a single 401 from a
+                    // misrouted `/model xai/...` killed the session.
+                    if let Err(error) = cli.run_turn(&prompt) {
+                        eprintln!("{error}");
+                    }
                     continue;
                 }
                 editor.push_history(input);
                 cli.record_prompt_history(&trimmed);
-                cli.run_turn(&trimmed)?;
+                if let Err(error) = cli.run_turn(&trimmed) {
+                    eprintln!("{error}");
+                }
             }
             input::ReadOutcome::Cancel => {}
             input::ReadOutcome::Exit => {
@@ -3851,11 +3869,19 @@ impl LiveCli {
         match result {
             Ok(summary) => {
                 self.replace_runtime(runtime)?;
-                spinner.finish(
-                    "✨ Done",
-                    TerminalRenderer::new().color_theme(),
-                    &mut stdout,
-                )?;
+                if final_assistant_text(&summary).is_empty() {
+                    spinner.finish(
+                        "✨ Done",
+                        TerminalRenderer::new().color_theme(),
+                        &mut stdout,
+                    )?;
+                } else {
+                    spinner.finish_after_stream(
+                        "✨ Done",
+                        TerminalRenderer::new().color_theme(),
+                        &mut stdout,
+                    )?;
+                }
                 println!();
                 if let Some(event) = summary.auto_compaction {
                     println!(
@@ -6881,7 +6907,10 @@ impl AnthropicRuntimeClient {
                     .with_prompt_cache(PromptCache::new(session_id));
                 ApiProviderClient::Anthropic(inner)
             }
-            ProviderKind::Xai | ProviderKind::OpenAi | ProviderKind::OpenCodeGo => {
+            ProviderKind::Xai
+            | ProviderKind::OpenAi
+            | ProviderKind::OpenCodeGo
+            | ProviderKind::Custom => {
                 // The api crate's `ProviderClient::from_model_with_anthropic_auth`
                 // with `None` for the anthropic auth routes via
                 // `detect_provider_kind` and builds an
@@ -7500,13 +7529,21 @@ fn slash_command_completion_candidates_with_sessions(
         completions.insert(format!("/model {model}"));
     }
 
-    // Registry-driven `/model <provider>/<id>` entries. Grouping emerges from
-    // MODEL_REGISTRY insertion order: Anthropic → xAI → OpenAi → OpenCodeGo.
-    // Short aliases (opus, sonnet, haiku, grok, kimi) are kept above via the
+    // Registry-driven `/model <provider>/<id>` entries. Grouping emerges
+    // from MODEL_REGISTRY insertion order: Anthropic → xAI → OpenAi →
+    // OpenCodeGo → Custom (declared in .claw.json). Custom-provider
+    // models already carry their prefix in `model_id` (e.g.
+    // "openrouter/claude-sonnet-4.6"), so we insert them as-is. Short
+    // aliases (opus, sonnet, haiku, grok, kimi) are kept above via the
     // hardcoded list — they're ergonomic shortcuts documented in USAGE.md.
     for (model_id, meta) in api::registered_models() {
-        let prefix = api::provider_display_prefix(meta.provider);
-        completions.insert(format!("/model {prefix}/{model_id}"));
+        let rendered = if matches!(meta.provider, api::ProviderKind::Custom) {
+            format!("/model {model_id}")
+        } else {
+            let prefix = api::provider_display_prefix(meta.provider);
+            format!("/model {prefix}/{model_id}")
+        };
+        completions.insert(rendered);
     }
 
     if let Some(active_session_id) = active_session_id.filter(|value| !value.trim().is_empty()) {

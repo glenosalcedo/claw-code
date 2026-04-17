@@ -53,6 +53,25 @@ impl ProviderClient {
                     OpenAiCompatConfig::opencode_go(),
                 )?))
             }
+            ProviderKind::Custom => {
+                // Custom providers from `.claw.json` carry their auth env
+                // var and base URL in the ProviderMetadata (leaked to
+                // &'static str at load time). They speak OpenAI wire format
+                // so we build an OpenAiCompatConfig from metadata and reuse
+                // the OpenAi client variant. Unwrap is safe by construction:
+                // detect_provider_kind only returns Custom when
+                // metadata_for_model has already found the provider.
+                let meta = providers::metadata_for_model(&resolved_model)
+                    .expect("Custom provider kind implies metadata is present");
+                let config = OpenAiCompatConfig {
+                    provider_name: "Custom",
+                    api_key_env: meta.auth_env,
+                    base_url_env: "",
+                    default_base_url: meta.default_base_url,
+                    max_request_body_bytes: 104_857_600, // 100MB default ceiling
+                };
+                Ok(Self::OpenAi(OpenAiCompatClient::from_env(config)?))
+            }
         }
     }
 
