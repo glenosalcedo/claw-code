@@ -96,6 +96,26 @@ impl Spinner {
         out.flush()
     }
 
+    /// Like [`finish`], but assumes the stream already printed content on the
+    /// current line. Skips `Clear(CurrentLine)` — which would erase the last
+    /// chunk of streamed text — and breaks to a new line before the label.
+    pub fn finish_after_stream(
+        &mut self,
+        label: &str,
+        theme: &ColorTheme,
+        out: &mut impl Write,
+    ) -> io::Result<()> {
+        self.frame_index = 0;
+        execute!(
+            out,
+            Print("\n"),
+            SetForegroundColor(theme.spinner_done),
+            Print(format!("✔ {label}\n")),
+            ResetColor
+        )?;
+        out.flush()
+    }
+
     pub fn fail(
         &mut self,
         label: &str,
@@ -1066,5 +1086,40 @@ mod tests {
 
         let output = String::from_utf8_lossy(&out);
         assert!(output.contains("Working"));
+    }
+
+    #[test]
+    fn finish_after_stream_does_not_clear_current_line() {
+        let terminal_renderer = TerminalRenderer::new();
+        let mut spinner = Spinner::new();
+        let mut out = Vec::new();
+        spinner
+            .finish_after_stream("Done", terminal_renderer.color_theme(), &mut out)
+            .expect("finish_after_stream succeeds");
+
+        let output = String::from_utf8_lossy(&out);
+        assert!(
+            !output.contains("\x1b[2K"),
+            "finish_after_stream must not emit Clear(CurrentLine) — it would erase streamed text"
+        );
+        assert!(output.starts_with('\n'));
+        assert!(output.contains("Done"));
+    }
+
+    #[test]
+    fn finish_clears_current_line_for_empty_stream() {
+        let terminal_renderer = TerminalRenderer::new();
+        let mut spinner = Spinner::new();
+        let mut out = Vec::new();
+        spinner
+            .finish("Done", terminal_renderer.color_theme(), &mut out)
+            .expect("finish succeeds");
+
+        let output = String::from_utf8_lossy(&out);
+        assert!(
+            output.contains("\x1b[2K"),
+            "finish must clear the spinner line when no content was streamed"
+        );
+        assert!(output.contains("Done"));
     }
 }
