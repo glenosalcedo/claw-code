@@ -33,6 +33,10 @@ pub enum ProviderKind {
     Anthropic,
     Xai,
     OpenAi,
+    /// OpenCode GO — subscription service proxying GLM, Kimi, Qwen, MiMo and
+    /// MiniMax models via an OpenAI-compatible endpoint at
+    /// `https://opencode.ai/zen/go/v1`.
+    OpenCodeGo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,6 +135,165 @@ const MODEL_REGISTRY: &[(&str, ProviderMetadata)] = &[
             default_base_url: openai_compat::DEFAULT_DASHSCOPE_BASE_URL,
         },
     ),
+    // xAI Grok 4.x models returned by https://api.x.ai/v1/models but not yet
+    // registered upstream. Includes the new multi-agent 4.20 variant.
+    (
+        "grok-code-fast-1",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4-0709",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4-fast-reasoning",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4-fast-non-reasoning",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4-1-fast-reasoning",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4-1-fast-non-reasoning",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4.20-0309-reasoning",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    (
+        "grok-4.20-0309-non-reasoning",
+        ProviderMetadata {
+            provider: ProviderKind::Xai,
+            auth_env: "XAI_API_KEY",
+            base_url_env: "XAI_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_XAI_BASE_URL,
+        },
+    ),
+    // Note: `grok-4.20-multi-agent-0309` is returned by xAI's /v1/models list
+    // but requires a dedicated multi-agent endpoint — it is rejected on
+    // /v1/chat/completions with "Multi Agent requests are not allowed on
+    // chat completions". Registering it here without transport support would
+    // ship a broken model, so it is deferred to a follow-up that adds the
+    // multi-agent endpoint.
+    // OpenCode GO models — proxied behind https://opencode.ai/zen/go/v1.
+    // See docs/providers/opencode-go.md for the current catalog and limits.
+    (
+        "glm-5",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    (
+        "glm-5.1",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    // Note: `kimi-k2.5` is intentionally NOT registered as a bare OpenCode GO
+    // entry. Upstream already routes bare `kimi-*` prefix to DashScope
+    // (US-023), and overriding that here would break existing DashScope
+    // users. Users who want Kimi via OpenCode GO must spell the full prefix:
+    // `claw --model opencode-go/kimi-k2.5`.
+    (
+        "qwen3.5-plus",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    (
+        "qwen3.6-plus",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    (
+        "mimo-v2-pro",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    (
+        "mimo-v2-omni",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    (
+        "minimax-m2.5",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
+    (
+        "minimax-m2.7",
+        ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
+        },
+    ),
 ];
 
 #[must_use]
@@ -157,6 +320,12 @@ pub fn resolve_model_alias(model: &str) -> String {
                     "kimi" => "kimi-k2.5",
                     _ => trimmed,
                 },
+                // OpenCode GO model IDs in MODEL_REGISTRY are already canonical
+                // (glm-5.1, kimi-k2.5, qwen3.6-plus, etc.), so we pass them
+                // through unchanged. Short aliases (e.g. "glm" -> "glm-5.1")
+                // are intentionally left for a later PR to keep this change
+                // focused on provider registration.
+                ProviderKind::OpenCodeGo => trimmed,
             })
         })
         .map_or_else(|| trimmed.to_string(), ToOwned::to_owned)
@@ -173,7 +342,13 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
             default_base_url: anthropic::DEFAULT_BASE_URL,
         });
     }
-    if canonical.starts_with("grok") {
+    // Bare `grok-*` names AND the explicit `xai/` provider prefix both route
+    // to xAI. The prefix form is needed so users can disambiguate routing
+    // even when `OPENAI_BASE_URL` is set to an OpenAI-compat endpoint that
+    // happens to proxy different models — without this arm the fallback
+    // auth-sniffer in detect_provider_kind would misroute `xai/grok-*` to
+    // the OpenAi path.
+    if canonical.starts_with("grok") || canonical.starts_with("xai/") {
         return Some(ProviderMetadata {
             provider: ProviderKind::Xai,
             auth_env: "XAI_API_KEY",
@@ -208,12 +383,36 @@ pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
     }
     // Kimi models (kimi-k2.5, kimi-k1.5, etc.) via DashScope compatible-mode.
     // Routes kimi/* and kimi-* model names to DashScope endpoint.
+    //
+    // Note: `kimi-k2.5` is also registered explicitly under OpenCode GO in
+    // MODEL_REGISTRY, which takes precedence because resolve_model_alias runs
+    // before this prefix match. Bare `kimi-*` without a registry entry falls
+    // through to DashScope here. Users who want the OpenCode GO route for
+    // other Kimi variants should spell the full prefix: `opencode-go/kimi-*`.
     if canonical.starts_with("kimi/") || canonical.starts_with("kimi-") {
         return Some(ProviderMetadata {
             provider: ProviderKind::OpenAi,
             auth_env: "DASHSCOPE_API_KEY",
             base_url_env: "DASHSCOPE_BASE_URL",
             default_base_url: openai_compat::DEFAULT_DASHSCOPE_BASE_URL,
+        });
+    }
+    // OpenCode GO (https://opencode.ai/zen/go/v1) proxies GLM, Kimi, Qwen,
+    // MiMo and MiniMax behind a single OpenAI-compatible endpoint. The
+    // official convention — documented at opencode.ai/docs/pt-br/go — is the
+    // `opencode-go/<model>` prefix. Bare IDs (glm-5.1, mimo-v2-pro, etc.) are
+    // already covered by MODEL_REGISTRY entries; this arm handles the prefix
+    // form for explicit routing.
+    if canonical.starts_with("opencode-go/")
+        || canonical.starts_with("glm-")
+        || canonical.starts_with("mimo-")
+        || canonical.starts_with("minimax-")
+    {
+        return Some(ProviderMetadata {
+            provider: ProviderKind::OpenCodeGo,
+            auth_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: openai_compat::DEFAULT_OPENCODE_GO_BASE_URL,
         });
     }
     None
@@ -470,8 +669,8 @@ mod tests {
     use super::{
         anthropic_missing_credentials, anthropic_missing_credentials_hint, detect_provider_kind,
         load_dotenv_file, max_tokens_for_model, max_tokens_for_model_with_override,
-        model_token_limit, parse_dotenv, preflight_message_request, resolve_model_alias,
-        ProviderKind,
+        metadata_for_model, model_token_limit, openai_compat, parse_dotenv,
+        preflight_message_request, resolve_model_alias, ProviderKind,
     };
 
     /// Serializes every test in this module that mutates process-wide
@@ -753,14 +952,14 @@ mod tests {
     #[test]
     fn returns_context_window_metadata_for_kimi_models() {
         // kimi-k2.5
-        let k25_limit = model_token_limit("kimi-k2.5")
-            .expect("kimi-k2.5 should have token limit metadata");
+        let k25_limit =
+            model_token_limit("kimi-k2.5").expect("kimi-k2.5 should have token limit metadata");
         assert_eq!(k25_limit.max_output_tokens, 16_384);
         assert_eq!(k25_limit.context_window_tokens, 256_000);
 
         // kimi-k1.5
-        let k15_limit = model_token_limit("kimi-k1.5")
-            .expect("kimi-k1.5 should have token limit metadata");
+        let k15_limit =
+            model_token_limit("kimi-k1.5").expect("kimi-k1.5 should have token limit metadata");
         assert_eq!(k15_limit.max_output_tokens, 16_384);
         assert_eq!(k15_limit.context_window_tokens, 256_000);
     }
@@ -768,11 +967,13 @@ mod tests {
     #[test]
     fn kimi_alias_resolves_to_kimi_k25_token_limits() {
         // The "kimi" alias resolves to "kimi-k2.5" via resolve_model_alias()
-        let alias_limit = model_token_limit("kimi")
-            .expect("kimi alias should resolve to kimi-k2.5 limits");
-        let direct_limit = model_token_limit("kimi-k2.5")
-            .expect("kimi-k2.5 should have limits");
-        assert_eq!(alias_limit.max_output_tokens, direct_limit.max_output_tokens);
+        let alias_limit =
+            model_token_limit("kimi").expect("kimi alias should resolve to kimi-k2.5 limits");
+        let direct_limit = model_token_limit("kimi-k2.5").expect("kimi-k2.5 should have limits");
+        assert_eq!(
+            alias_limit.max_output_tokens,
+            direct_limit.max_output_tokens
+        );
         assert_eq!(
             alias_limit.context_window_tokens,
             direct_limit.context_window_tokens
@@ -1141,4 +1342,62 @@ NO_EQUALS_LINE
     // (env_lock only protects within a single binary). The detection logic
     // is covered: OPENAI_BASE_URL alone routes to OpenAi as a last-resort
     // fallback in detect_provider_kind().
+
+    #[test]
+    fn xai_prefix_routes_to_xai_endpoint_regardless_of_openai_env() {
+        // Regression: `/model xai/grok-4-1-fast-non-reasoning` was falling
+        // through to the auth-sniffer and hitting the OpenAi path (pointing
+        // at OpenCode GO via OPENAI_BASE_URL), which returned a confusing
+        // "Model not supported" 401 from the wrong provider. The prefix must
+        // pin routing to xAI.
+        let meta = metadata_for_model("xai/grok-4-1-fast-non-reasoning").expect("metadata");
+        assert_eq!(meta.provider, ProviderKind::Xai);
+        assert_eq!(meta.auth_env, "XAI_API_KEY");
+        assert_eq!(meta.base_url_env, "XAI_BASE_URL");
+        assert_eq!(meta.default_base_url, openai_compat::DEFAULT_XAI_BASE_URL);
+    }
+
+    #[test]
+    fn opencode_go_prefix_routes_to_opencode_go_endpoint() {
+        let meta = metadata_for_model("opencode-go/glm-5.1").expect("metadata");
+        assert_eq!(meta.provider, ProviderKind::OpenCodeGo);
+        assert_eq!(meta.auth_env, "OPENCODE_GO_API_KEY");
+        assert_eq!(meta.base_url_env, "OPENCODE_GO_BASE_URL");
+        assert_eq!(
+            meta.default_base_url,
+            openai_compat::DEFAULT_OPENCODE_GO_BASE_URL
+        );
+    }
+
+    #[test]
+    fn bare_glm_model_routes_to_opencode_go() {
+        let meta = metadata_for_model("glm-5.1").expect("glm-5.1 registered");
+        assert_eq!(meta.provider, ProviderKind::OpenCodeGo);
+        let meta2 = metadata_for_model("mimo-v2-pro").expect("mimo registered");
+        assert_eq!(meta2.provider, ProviderKind::OpenCodeGo);
+        let meta3 = metadata_for_model("minimax-m2.7").expect("minimax registered");
+        assert_eq!(meta3.provider, ProviderKind::OpenCodeGo);
+    }
+
+    #[test]
+    fn grok_4_models_registered() {
+        // Regression: the 9-strong Grok 4.x catalog from xAI's /v1/models
+        // (excluding the multi-agent variant which requires a different
+        // endpoint) must all resolve to xAI routing metadata.
+        for model in [
+            "grok-code-fast-1",
+            "grok-4-0709",
+            "grok-4-fast-reasoning",
+            "grok-4-fast-non-reasoning",
+            "grok-4-1-fast-reasoning",
+            "grok-4-1-fast-non-reasoning",
+            "grok-4.20-0309-reasoning",
+            "grok-4.20-0309-non-reasoning",
+        ] {
+            let meta =
+                metadata_for_model(model).unwrap_or_else(|| panic!("{model} should be registered"));
+            assert_eq!(meta.provider, ProviderKind::Xai, "{model}");
+            assert_eq!(meta.auth_env, "XAI_API_KEY", "{model}");
+        }
+    }
 }

@@ -43,6 +43,16 @@ impl ProviderClient {
                 };
                 Ok(Self::OpenAi(OpenAiCompatClient::from_env(config)?))
             }
+            ProviderKind::OpenCodeGo => {
+                // OpenCode GO speaks the OpenAI wire format but uses a distinct
+                // OPENCODE_GO_API_KEY env var and its own base URL
+                // (https://opencode.ai/zen/go/v1). We reuse the OpenAi client
+                // variant because there's no wire-level distinction — only the
+                // credential/base-url pair differs.
+                Ok(Self::OpenAi(OpenAiCompatClient::from_env(
+                    OpenAiCompatConfig::opencode_go(),
+                )?))
+            }
         }
     }
 

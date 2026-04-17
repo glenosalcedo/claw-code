@@ -19,6 +19,7 @@ use super::{preflight_message_request, Provider, ProviderFuture};
 pub const DEFAULT_XAI_BASE_URL: &str = "https://api.x.ai/v1";
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 pub const DEFAULT_DASHSCOPE_BASE_URL: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+pub const DEFAULT_OPENCODE_GO_BASE_URL: &str = "https://opencode.ai/zen/go/v1";
 const REQUEST_ID_HEADER: &str = "request-id";
 const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
 const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_secs(1);
@@ -41,11 +42,13 @@ pub struct OpenAiCompatConfig {
 const XAI_ENV_VARS: &[&str] = &["XAI_API_KEY"];
 const OPENAI_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
 const DASHSCOPE_ENV_VARS: &[&str] = &["DASHSCOPE_API_KEY"];
+const OPENCODE_GO_ENV_VARS: &[&str] = &["OPENCODE_GO_API_KEY"];
 
 // Provider-specific request body size limits in bytes
 const XAI_MAX_REQUEST_BODY_BYTES: usize = 52_428_800; // 50MB
 const OPENAI_MAX_REQUEST_BODY_BYTES: usize = 104_857_600; // 100MB
 const DASHSCOPE_MAX_REQUEST_BODY_BYTES: usize = 6_291_456; // 6MB (observed limit in dogfood)
+const OPENCODE_GO_MAX_REQUEST_BODY_BYTES: usize = 104_857_600; // 100MB (matches OpenAI ceiling)
 
 impl OpenAiCompatConfig {
     #[must_use]
@@ -85,12 +88,26 @@ impl OpenAiCompatConfig {
         }
     }
 
+    /// OpenCode GO's `/zen/go/v1` OpenAI-compatible endpoint for GLM / Kimi /
+    /// Qwen / MiMo / MiniMax models proxied via Fireworks and similar backends.
+    #[must_use]
+    pub const fn opencode_go() -> Self {
+        Self {
+            provider_name: "OpenCode GO",
+            api_key_env: "OPENCODE_GO_API_KEY",
+            base_url_env: "OPENCODE_GO_BASE_URL",
+            default_base_url: DEFAULT_OPENCODE_GO_BASE_URL,
+            max_request_body_bytes: OPENCODE_GO_MAX_REQUEST_BODY_BYTES,
+        }
+    }
+
     #[must_use]
     pub fn credential_env_vars(self) -> &'static [&'static str] {
         match self.provider_name {
             "xAI" => XAI_ENV_VARS,
             "OpenAI" => OPENAI_ENV_VARS,
             "DashScope" => DASHSCOPE_ENV_VARS,
+            "OpenCode GO" => OPENCODE_GO_ENV_VARS,
             _ => &[],
         }
     }
@@ -493,7 +510,14 @@ impl StreamState {
         }
 
         for choice in chunk.choices {
-            if let Some(content) = choice.delta.content.filter(|value| !value.is_empty()) {
+            // Prefer `content`; fall back to `reasoning_content` for GLM and
+            // other reasoning-first models that stream chain-of-thought first.
+            let text = choice
+                .delta
+                .content
+                .filter(|v| !v.is_empty())
+                .or_else(|| choice.delta.reasoning_content.filter(|v| !v.is_empty()));
+            if let Some(content) = text {
                 if !self.text_started {
                     self.text_started = true;
                     events.push(StreamEvent::ContentBlockStart(ContentBlockStartEvent {
@@ -735,6 +759,12 @@ struct ChunkChoice {
 struct ChunkDelta {
     #[serde(default)]
     content: Option<String>,
+    /// GLM family and some reasoning-first models emit chain-of-thought in
+    /// `reasoning_content` before the final `content`. Fallback path in
+    /// `ingest_chunk` surfaces it as plain text so we never emit an empty
+    /// stream.
+    #[serde(default)]
+    reasoning_content: Option<String>,
     #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     tool_calls: Vec<DeltaToolCall>,
 }
@@ -801,7 +831,10 @@ fn strip_routing_prefix(model: &str) -> &str {
         let prefix = &model[..pos];
         // Only strip if the prefix before "/" is a known routing prefix,
         // not if "/" appears in the middle of the model name for other reasons.
-        if matches!(prefix, "openai" | "xai" | "grok" | "qwen" | "kimi") {
+        if matches!(
+            prefix,
+            "openai" | "xai" | "grok" | "qwen" | "kimi" | "opencode-go"
+        ) {
             &model[pos + 1..]
         } else {
             model
@@ -1271,6 +1304,14 @@ fn parse_sse_frame(
     // HTTP error status. Surface the error message directly rather than letting
     // ChatCompletionChunk deserialization fail with a cryptic 'missing field' error.
     if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&payload) {
+        // OpenCode GO emits cost-tracking frames with `choices: []` at the end
+        // of a stream. Skip silently so they don't trigger deserialization
+        // errors (`ChatCompletionChunk` expects at least one choice).
+        if let Some(choices) = raw.get("choices").and_then(|v| v.as_array()) {
+            if choices.is_empty() {
+                return Ok(None);
+            }
+        }
         if let Some(err_obj) = raw.get("error") {
             let msg = err_obj
                 .get("message")
@@ -2195,9 +2236,16 @@ mod tests {
 
     #[test]
     fn provider_specific_size_limits_are_correct() {
-        assert_eq!(OpenAiCompatConfig::dashscope().max_request_body_bytes, 6_291_456); // 6MB
-        assert_eq!(OpenAiCompatConfig::openai().max_request_body_bytes, 104_857_600); // 100MB
-        assert_eq!(OpenAiCompatConfig::xai().max_request_body_bytes, 52_428_800); // 50MB
+        assert_eq!(
+            OpenAiCompatConfig::dashscope().max_request_body_bytes,
+            6_291_456
+        ); // 6MB
+        assert_eq!(
+            OpenAiCompatConfig::openai().max_request_body_bytes,
+            104_857_600
+        ); // 100MB
+        assert_eq!(OpenAiCompatConfig::xai().max_request_body_bytes, 52_428_800);
+        // 50MB
     }
 
     #[test]
@@ -2206,5 +2254,36 @@ mod tests {
         assert_eq!(super::strip_routing_prefix("kimi/kimi-k2.5"), "kimi-k2.5");
         assert_eq!(super::strip_routing_prefix("kimi-k2.5"), "kimi-k2.5"); // no prefix, unchanged
         assert_eq!(super::strip_routing_prefix("kimi/kimi-k1.5"), "kimi-k1.5");
+    }
+
+    #[test]
+    fn strip_routing_prefix_strips_opencode_go_prefix() {
+        assert_eq!(
+            super::strip_routing_prefix("opencode-go/glm-5.1"),
+            "glm-5.1"
+        );
+        assert_eq!(
+            super::strip_routing_prefix("opencode-go/kimi-k2.5"),
+            "kimi-k2.5"
+        );
+        assert_eq!(super::strip_routing_prefix("glm-5.1"), "glm-5.1"); // no prefix, unchanged
+    }
+
+    #[test]
+    fn reasoning_content_used_when_content_empty() {
+        let json = r#"{"content":"","reasoning_content":"thinking...","tool_calls":[]}"#;
+        let delta: super::ChunkDelta = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(delta.content.as_deref(), Some(""));
+        assert_eq!(delta.reasoning_content.as_deref(), Some("thinking..."));
+    }
+
+    #[test]
+    fn empty_choices_frame_returns_none() {
+        let frame = "data: {\"id\":\"x\",\"object\":\"chat.completion.chunk\",\"choices\":[]}";
+        let result = super::parse_sse_frame(frame, "OpenCode GO", "glm-5.1");
+        assert!(
+            matches!(result, Ok(None)),
+            "expected Ok(None), got {result:?}"
+        );
     }
 }
