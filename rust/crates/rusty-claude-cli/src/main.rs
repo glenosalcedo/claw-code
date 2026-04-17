@@ -3777,11 +3777,19 @@ impl LiveCli {
         match result {
             Ok(summary) => {
                 self.replace_runtime(runtime)?;
-                spinner.finish(
-                    "✨ Done",
-                    TerminalRenderer::new().color_theme(),
-                    &mut stdout,
-                )?;
+                if final_assistant_text(&summary).is_empty() {
+                    spinner.finish(
+                        "✨ Done",
+                        TerminalRenderer::new().color_theme(),
+                        &mut stdout,
+                    )?;
+                } else {
+                    spinner.finish_after_stream(
+                        "✨ Done",
+                        TerminalRenderer::new().color_theme(),
+                        &mut stdout,
+                    )?;
+                }
                 println!();
                 if let Some(event) = summary.auto_compaction {
                     println!(
@@ -8421,6 +8429,7 @@ mod tests {
             request_id: Some("req_jobdori_789".to_string()),
             body: String::new(),
             retryable: true,
+            suggested_action: None,
         };
 
         let rendered = format_user_visible_api_error("session-issue-22", &error);
@@ -8443,6 +8452,7 @@ mod tests {
                 request_id: Some("req_jobdori_790".to_string()),
                 body: String::new(),
                 retryable: true,
+                suggested_action: None,
             }),
         };
 
@@ -8506,6 +8516,7 @@ mod tests {
             request_id: Some("req_ctx_456".to_string()),
             body: String::new(),
             retryable: false,
+            suggested_action: None,
         };
 
         let rendered = format_user_visible_api_error("session-issue-32", &error);
@@ -8537,6 +8548,7 @@ mod tests {
                 request_id: Some("req_ctx_retry_789".to_string()),
                 body: String::new(),
                 retryable: false,
+                suggested_action: None,
             }),
         };
 
